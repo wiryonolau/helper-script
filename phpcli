@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+function usage {
+    echo "Running php cli using docker image"
+    echo "Usage : phpcli [OPTIONS]... [FILE]"
+    echo ""
+    echo "OPTIONS :"
+    echo "-v     PHP Version, default 7.4"
+    echo "-t     Check given file syntax"
+    echo "-w     Specify custom working directory as docker volume"
+    echo ""
+    echo "Example :"
+    echo "Type 'phpcli -v 7.4 index.php' to execute index.php using version 7.4"
+    echo "Type 'phpcli -v 7.4 -t index.php' to check index.php syntax using version 7.4"
+    exit 0
+}
+
+function parse_args {
+    declare -A ARGS=( )
+    ARGS[VERSION]=7.4
+    ARGS[TEST]=0
+    ARGS[RUN]=0
+    ARGS[FILE]=""
+
+    local WORKDIR=""
+    local FILENAME=""
+    local DOCKERWORKDIR="/srv"
+
+    while [ "${1}" ]
+    do
+        case "${1}" in
+            "-v" )
+                ARGS[VERSION]="${2}"
+                shift
+                ;;
+            "-t" )
+                ARGS[TEST]=1
+                ;;
+            "-w" )
+                WORKDIR=$(realpath ${2})
+                shift
+                ;;
+            "-h" | "--help" )
+                usage
+                ;;
+            *)
+                if [ -f $1 ]; then
+                    ARGS[FILE]=$(realpath ${1})
+                    if [ -z "${WORKDIR}" ]; then
+                        WORKDIR=$(dirname ${ARGS[FILE]})
+                    fi
+                    FILENAME="${DOCKERWORKDIR}${ARGS[FILE]#"${WORKDIR}"}"
+                else
+                    usage
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    if [ ! docker  info > /dev/null 2>&1 ]; then
+        echo "Docker not running"
+        exit 1
+    fi
+
+    echo "Running PHP Version ${ARGS[VERSION]}"
+    if [ ! -z "${WORKDIR}" ]; then
+        echo "Using host directory ${WORKDIR}"
+    fi
+
+    echo ""
+
+    if [ -z ${ARGS[FILE]} ]; then
+        docker run --rm -it "php:${ARGS[VERSION]}-cli"
+    elif [ "${ARGS[TEST]}" -eq "1" ]; then
+        docker run --rm -it -v "${WORKDIR}":"${DOCKERWORKDIR}" "php:${ARGS[VERSION]}-cli" php -l "${FILENAME}"
+    else
+        docker run --rm -it -v "${WORKDIR}":"${DOCKERWORKDIR}" "php:${ARGS[VERSION]}-cli" php "${FILENAME}"
+    fi
+
+    echo ""
+}
+
+function main {
+    parse_args "$@"
+    exit 0
+}
+
+main "$@"
